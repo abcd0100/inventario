@@ -6,7 +6,16 @@ const jwt = require('jsonwebtoken');
 const pool = require('./db');
 
 const app = express();
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+const permitidos = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+const esVercelDelProyecto = (o) => /^https:\/\/inventario-[a-z0-9-]+-dsa-inc\.vercel\.app$/.test(o);
+
+app.use(cors({
+  origin: (origin, cb) =>
+    cb(null, !origin || !permitidos.length || permitidos.includes(origin) || esVercelDelProyecto(origin)),
+}));
 app.use(express.json());
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
