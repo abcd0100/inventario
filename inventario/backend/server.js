@@ -69,6 +69,43 @@ function crud(path, table, fields, opts = {}) {
 
 const STOCK_TOTAL = `CAST(COALESCE((SELECT SUM(e.cantidad) FROM existencias e WHERE e.producto_id = p.id), 0) AS SIGNED)`;
 
+// Alta de producto con almacén y cantidad inicial
+app.post('/api/productos', auth, h(async (req, res) => {
+  const b = req.body;
+  if (!b.nombre) throw fail(400, 'El nombre es obligatorio');
+  const cant = b.cantidad_inicial === '' || b.cantidad_inicial == null ? 0 : Number(b.cantidad_inicial);
+  const alm = Number(b.almacen_id) || null;
+  if (!Number.isInteger(cant) || cant < 0) throw fail(400, 'La cantidad inicial debe ser un entero de 0 o más');
+  if (cant > 0 && !alm) throw fail(400, 'Elige el almacén donde se guardará');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [x] = await conn.query(
+      'INSERT INTO productos (nombre, categoria, precio, stock_minimo) VALUES (?,?,?,?)',
+      [
+        b.nombre,
+        b.categoria || null,
+        b.precio === '' || b.precio == null ? 0 : b.precio,
+        b.stock_minimo === '' || b.stock_minimo == null ? 5 : b.stock_minimo,
+      ]);
+    if (cant > 0) {
+      await conn.query(
+        'INSERT INTO existencias (producto_id, almacen_id, cantidad) VALUES (?,?,?)', [x.insertId, alm, cant]);
+      await conn.query(
+        `INSERT INTO movimientos (tipo, producto_id, almacen_destino_id, cantidad, motivo, usuario)
+         VALUES ('entrada',?,?,?,?,?)`, [x.insertId, alm, cant, 'Alta de producto', req.user.usuario]);
+    }
+    await conn.commit();
+    res.status(201).json({ id: x.insertId });
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}));
+
 crud('/api/productos', 'productos', ['nombre', 'categoria', 'precio', 'stock_minimo'], {
   defaults: { precio: 0, stock_minimo: 5 },
   listSql: `SELECT p.*, ${STOCK_TOTAL} AS stock_total FROM productos p ORDER BY p.id DESC`,

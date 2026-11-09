@@ -39,8 +39,11 @@ function Login({ onLogin }) {
 }
 
 // Panel CRUD reutilizable. `extra` agrega columnas de solo lectura.
-function Panel({ endpoint, fields, extra = [], onChange = () => {} }) {
-  const vacio = Object.fromEntries(fields.map((f) => [f.key, '']));
+function Panel({ endpoint, fields, extra = [], almacenes, onChange = () => {} }) {
+  const vacio = {
+    ...Object.fromEntries(fields.map((f) => [f.key, ''])),
+    ...(almacenes ? { almacen_id: '', cantidad_inicial: '' } : {}),
+  };
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(vacio);
   const [editId, setEditId] = useState(null);
@@ -72,6 +75,16 @@ function Panel({ endpoint, fields, extra = [], onChange = () => {} }) {
           <input key={f.key} type={f.type || 'text'} placeholder={f.label} title={f.label} value={form[f.key]}
             onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
         ))}
+                {almacenes && !editId && (
+          <>
+            <select value={form.almacen_id} onChange={(e) => setForm({ ...form, almacen_id: e.target.value })}>
+              <option value="">Almacén…</option>
+              {almacenes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+            <input type="number" min="0" placeholder="Cantidad inicial" value={form.cantidad_inicial}
+              onChange={(e) => setForm({ ...form, cantidad_inicial: e.target.value })} />
+          </>
+        )}
         <button onClick={guardar}>{editId ? 'Guardar cambios' : 'Agregar'}</button>{' '}
         {editId && <button className="sec" onClick={() => { setEditId(null); setForm(vacio); }}>Cancelar</button>}
         {err && <p className="err">{err}</p>}
@@ -309,6 +322,10 @@ export default function App() {
     if (localStorage.getItem('token')) api('/api/alertas').then(setAlertas).catch(() => {});
   };
   useEffect(() => { if (logged) cargarAlertas(); }, [logged, tab]);
+    const [almacenes, setAlmacenes] = useState([]);
+  useEffect(() => {
+    if (logged) api('/api/almacenes').then(setAlmacenes).catch(() => {});
+  }, [logged, tab]);
 
   if (!logged) return <Login onLogin={() => setLogged(true)} />;
 
@@ -331,7 +348,7 @@ export default function App() {
             {alertas.length > 5 ? '…' : ''}
           </div>
         )}
-        {tab === 'productos' && <Panel endpoint="/api/productos" fields={PRODUCTOS} extra={EXTRA_PRODUCTOS} onChange={cargarAlertas} />}
+        {tab === 'productos' && <Panel endpoint="/api/productos" fields={PRODUCTOS} extra={EXTRA_PRODUCTOS} almacenes={almacenes} onChange={cargarAlertas} />}
         {tab === 'existencias' && <Existencias />}
         {tab === 'movimientos' && <Movimientos onChange={cargarAlertas} />}
         {tab === 'almacenes' && <Panel endpoint="/api/almacenes" fields={ALMACENES} />}
